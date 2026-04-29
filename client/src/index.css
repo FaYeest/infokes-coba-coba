@@ -1,0 +1,253 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: var(--notion-bg);
+  --notion-bg: #ffffff;
+  --notion-text: #37352f;
+  --notion-border: #ebebeb;
+  --notion-gray: #f7f7f5;
+  --notion-subtext: #787774;
+  --notion-text-light: #9b9a97;
+  --notion-hover: #f1f1ef;
+  --notion-border-dark: #d3d1cb;
+  --color-notion-green: #69986e;
+  --color-notion-yellow: #e6b800;
+  --color-notion-blue: #2eaadc;
+  --color-notion-blue-hover: #2094c3;
+  --color-mac-red: #ff5f57;
+  --color-mac-yellow: #febc2e;
+  --color-mac-green: #28c840;
+  --color-mac-red-border: #e0443e;
+  --color-mac-yellow-border: #d89e24;
+  --color-mac-green-border: #1aab29;
+  --box-shadow: rgba(0, 0, 0, 0.133) 0 1.6px 3.6px 0,
+    rgba(0, 0, 0, 0.11) 0 0.3px 0.9px 0;
+  --box-shadow-thick: rgb(0 0 0 / 10%) 0 1.8px 1.9px,
+    rgb(0 0 0 / 15%) 0 6.1px 6.3px,
+    rgb(0 0 0 / 10%) 0 -2px 4px,
+    rgb(0 0 0 / 15%) 0 -6.1px 12px,
+    rgb(0 0 0 / 25%) 0 6px 12px;
+}
+
+.dark {
+  color-scheme: dark;
+  --notion-bg: #191919;
+  --notion-text: #e3e3e2;
+  --notion-border: #2f2f2f;
+  --notion-gray: #202020;
+  --notion-subtext: #9b9a97;
+  --notion-text-light: #5a5a58;
+  --notion-hover: #2f2f2f;
+  --notion-border-dark: #3f3f3f;
+  --box-shadow: rgba(0, 0, 0, 0.3) 0 1.6px 3.6px 0,
+    rgba(0, 0, 0, 0.2) 0 0.3px 0.9px 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--notion-bg);
+  color: var(--notion-text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgb(105 152 110 / 28%);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--notion-border-dark);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--notion-text-light);
+  background-clip: content-box;
+}
+
+.glass-panel {
+  background: var(--notion-bg);
+  border: 1px solid var(--notion-border);
+  box-shadow: var(--box-shadow);
+}
+
+.field {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--notion-border);
+  background: var(--notion-bg);
+  color: var(--notion-text);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.field:focus {
+  border-color: var(--color-notion-green);
+  box-shadow: 0 0 0 3px rgb(105 152 110 / 18%);
+  background: var(--notion-bg);
+}
+
+.field::placeholder {
+  color: var(--notion-text-light);
+}
+
+.table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--notion-border-dark) transparent;
+}
+
+.app-shell .text-white {
+  color: var(--notion-text);
+}
+
+.app-shell .text-slate-100,
+.app-shell .text-slate-200 {
+  color: var(--notion-text);
+}
+
+.app-shell .text-slate-300 {
+  color: var(--notion-subtext);
+}
+
+.app-shell .text-slate-400 {
+  color: var(--notion-subtext);
+}
+
+.app-shell .text-slate-500 {
+  color: var(--notion-text-light);
+}
+
+.app-shell .text-sky-200 {
+  color: var(--color-notion-blue);
+}
+
+.app-shell .text-blue-100 {
+  color: #1d4ed8;
+}
+
+.app-shell .text-emerald-200 {
+  color: var(--color-notion-green);
+}
+
+.app-shell .text-rose-100,
+.app-shell .text-rose-200 {
+  color: #be123c;
+}
+
+.app-shell .border-white\/10 {
+  border-color: var(--notion-border);
+}
+
+.app-shell .border-white\/14 {
+  border-color: var(--notion-border-dark);
+}
+
+.app-shell .bg-white\/5,
+.app-shell .bg-white\/\[0\.035\],
+.app-shell .bg-white\/\[0\.04\],
+.app-shell .bg-white\/\[0\.025\] {
+  background-color: var(--notion-gray);
+}
+
+.app-shell .hover\:bg-white\/7:hover,
+.app-shell .hover\:bg-white\/10:hover,
+.app-shell .hover\:bg-white\/\[0\.035\]:hover,
+.app-shell .hover\:bg-white\/\[0\.06\]:hover {
+  background-color: var(--notion-hover);
+}
+
+.app-shell .hover\:text-white:hover {
+  color: var(--notion-text);
+}
+
+.app-shell .hover\:text-rose-100:hover {
+  color: #be123c;
+}
+
+.app-shell .bg-black\/30 {
+  background-color: var(--notion-gray);
+}
+
+.app-shell .bg-notion-green.text-white,
+.app-shell .bg-rose-500.text-white,
+.app-shell .bg-emerald-950\/88,
+.app-shell .bg-rose-950\/88 {
+  color: #ffffff;
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 100;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(-8px);
+  transition: all 0.2s;
+  pointer-events: none;
+}
+
+[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+.dark input[type="number"],
+.dark input[type="date"],
+.dark input[type="time"],
+.dark textarea,
+.dark select {
+  color-scheme: dark;
+}
