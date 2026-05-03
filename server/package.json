@@ -6,7 +6,9 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "seed:covid": "node src/scripts/seedCovid.js",
+    "seed:covid:reset": "node src/scripts/seedCovid.js --reset-covid"
   },
   "dependencies": {
     "cors": "^2.8.5",

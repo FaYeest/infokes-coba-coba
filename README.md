@@ -1,6 +1,6 @@
 # Sistem Manajemen Data Pasien Rawat Inap
 
-Aplikasi web React + Express + MySQL untuk tugas kuliah tentang manipulasi string dan query database. UI dibuat dark, clean, responsif, dan memakai layout sidebar seperti aplikasi profesional.
+Aplikasi web React + Express + MySQL untuk tugas kuliah tentang manipulasi string dan query database. UI dibuat clean, responsif, dan memakai layout sidebar seperti aplikasi profesional.
 
 ## Teknologi
 
@@ -14,7 +14,7 @@ Aplikasi web React + Express + MySQL untuk tugas kuliah tentang manipulasi strin
 infokes/
 ├─ client/              # React UI
 ├─ server/              # Express API
-├─ database/schema.sql  # Database, tabel, dummy data, contoh query
+├─ database/schema.sql  # Database, tabel, dan contoh query
 └─ README.md
 ```
 
@@ -56,7 +56,7 @@ Frontend berjalan di `http://localhost:5173`, backend di `http://localhost:5000`
 - Manajemen pasien mendukung tambah, edit, hapus, tabel data, dan pencarian nama/nomor RM dengan query `LIKE`.
 - Data rawat inap mendukung tambah data, update diagnosa, update kamar, update status, serta tampilan relasi pasien dan rawat inap memakai `JOIN`.
 - Manipulasi string dilakukan di backend saat pasien disimpan: nama di-`trim`, spasi ganda dirapikan, lalu diubah menjadi Title Case.
-- Validasi form ada di frontend dan backend untuk mencegah nama, alamat, kamar, dan diagnosa kosong.
+- Validasi form ada di frontend dan backend untuk mencegah nama kosong, nama berisi angka, alamat kosong, kamar kosong, dan diagnosa kosong.
 - Feedback aksi ditampilkan lewat toast, error banner, validasi field, dan modal konfirmasi hapus.
 
 ## Endpoint API
@@ -114,7 +114,6 @@ Untuk membuktikan manipulasi string berjalan melalui backend aplikasi, pastikan 
 
 ```powershell
 $body = @{
-  nomor_rm = "RM-CLI-001"
   nama = "  budi   santoso  "
   jenis_kelamin = "Laki-laki"
   tanggal_lahir = "2000-01-15"
@@ -141,6 +140,24 @@ Pada hasil JSON, field `nama` akan tampil sebagai:
 "nama": "Budi Santoso"
 ```
 
+Field `nomor_rm` juga dibuat otomatis oleh backend dengan format profesional:
+
+```txt
+RM-YYYYMMDD-0001
+```
+
+Contoh:
+
+```txt
+RM-20260503-0001
+```
+
+Keterangan:
+
+- `RM` berarti Rekam Medis.
+- `YYYYMMDD` berarti tanggal data pasien dibuat.
+- `0001` berarti nomor urut pasien pada tanggal tersebut.
+
 ## Query Database
 
 File `database/schema.sql` berisi:
@@ -148,12 +165,46 @@ File `database/schema.sql` berisi:
 - `CREATE DATABASE`
 - `CREATE TABLE pasien`
 - `CREATE TABLE rawat_inap`
-- `INSERT` data dummy
+- Contoh `INSERT` data pasien
 - `SELECT` data pasien
 - `UPDATE` data pasien
 - `DELETE` data pasien
 - `JOIN` pasien dengan rawat inap
 - Search pasien menggunakan `LIKE`
+
+Catatan: contoh query di `schema.sql` dikomentari agar database tetap kosong setelah import dan tidak otomatis membuat data dummy.
+
+## Seed Data COVID-19
+
+Untuk membuat data dummy studi kasus COVID-19 sebanyak 120.000 pasien dan 120.000 data rawat inap, jalankan:
+
+```powershell
+npm run seed:covid
+```
+
+Jika ingin menghapus seed COVID-19 lama lalu membuat ulang 120.000 data dari awal:
+
+```powershell
+npm run seed:covid:reset
+```
+
+Seeder hanya menghapus data dengan nomor rekam medis prefix `RM-COV-` saat memakai `seed:covid:reset`, sehingga data pasien manual tetap aman.
+
+Nama pasien dari seeder tidak memakai angka. Identitas unik pasien tetap memakai `nomor_rm`, bukan tambahan angka pada nama.
+
+Format nomor rekam medis seed:
+
+```txt
+RM-COV-YYYYMMDD-0001
+```
+
+Contoh:
+
+```txt
+RM-COV-20200302-0001
+```
+
+Catatan performa: endpoint daftar pasien dan rawat inap otomatis membatasi hasil default ke 200 baris terbaru agar UI tetap ringan meskipun database berisi 120.000 baris. Total statistik dashboard tetap menghitung seluruh data.
 
 ## Skenario Demo Presentasi
 
@@ -166,7 +217,7 @@ File `database/schema.sql` berisi:
 7. Update diagnosa, kamar, dan status pasien menjadi `Keluar`.
 8. Tunjukkan bahwa dashboard ikut berubah setelah data disinkronkan.
 9. Jalankan contoh CLI manipulasi string untuk membuktikan input nama berantakan berubah menjadi Title Case.
-10. Buka `database/schema.sql` untuk menunjukkan query lengkap dan dummy data.
+10. Buka `database/schema.sql` untuk menunjukkan query lengkap tanpa data dummy.
 
 ## Catatan
 

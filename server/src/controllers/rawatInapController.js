@@ -24,10 +24,20 @@ const inpatientSelect = `
   INNER JOIN pasien p ON p.id = ri.pasien_id
 `;
 
+function getListLimit(value) {
+  const parsed = Number(value || 200);
+  if (!Number.isFinite(parsed) || parsed < 1) return 200;
+  return Math.min(parsed, 500);
+}
+
 export async function getInpatients(req, res, next) {
   try {
-    const [rows] = await pool.query(`${inpatientSelect} ORDER BY ri.updated_at DESC`);
-    res.json({ success: true, data: rows });
+    const limit = getListLimit(req.query.limit);
+    const [rows] = await pool.query(
+      `${inpatientSelect} ORDER BY ri.updated_at DESC, ri.id DESC LIMIT ?`,
+      [limit]
+    );
+    res.json({ success: true, data: rows, meta: { limit } });
   } catch (error) {
     next(error);
   }

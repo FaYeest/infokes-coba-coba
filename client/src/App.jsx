@@ -1,5 +1,6 @@
 import {
   Activity,
+  BarChart3,
   BedDouble,
   CheckCircle2,
   ClipboardList,
@@ -22,6 +23,8 @@ import { api } from "./lib/api";
 
 const STATUS_OPTIONS = ["Dirawat", "Observasi", "Keluar"];
 const GENDER_OPTIONS = ["Laki-laki", "Perempuan"];
+const PATIENT_GENDER_FILTER_OPTIONS = ["Semua", ...GENDER_OPTIONS];
+const INPATIENT_STATUS_FILTER_OPTIONS = ["Semua", ...STATUS_OPTIONS];
 
 const navigation = [
   { id: "dashboard", label: "Dashboard", icon: Home },
@@ -37,12 +40,26 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function nextRecordNumber() {
-  return `RM-${Date.now().toString().slice(-6)}`;
-}
-
 function normalizeWhitespace(value = "") {
   return String(value).trim().replace(/\s+/g, " ");
+}
+
+function sanitizePatientNameInput(value = "") {
+  return String(value).replace(/[^\p{L}\s]/gu, "");
+}
+
+function isValidPatientName(value = "") {
+  const normalized = normalizeWhitespace(value);
+  return /^[\p{L}]+(?:\s[\p{L}]+)*$/u.test(normalized);
+}
+
+function sanitizePhoneInput(value = "") {
+  return String(value).replace(/\D/g, "").slice(0, 15);
+}
+
+function isValidPhoneNumber(value = "") {
+  if (!value) return true;
+  return /^0\d{9,14}$/.test(value);
 }
 
 function titleCase(value = "") {
@@ -76,6 +93,9 @@ export default function App() {
   const [patients, setPatients] = useState([]);
   const [inpatients, setInpatients] = useState([]);
   const [patientSearch, setPatientSearch] = useState("");
+  const [inpatientSearch, setInpatientSearch] = useState("");
+  const [inpatientStatusFilter, setInpatientStatusFilter] = useState("Semua");
+  const [patientGenderFilter, setPatientGenderFilter] = useState("Semua");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -213,6 +233,24 @@ export default function App() {
     () => navigation.find((item) => item.id === activeView)?.label || "Dashboard",
     [activeView]
   );
+  const filteredPatients = useMemo(() => {
+    if (patientGenderFilter === "Semua") return patients;
+    return patients.filter((patient) => patient.jenis_kelamin === patientGenderFilter);
+  }, [patientGenderFilter, patients]);
+  const filteredInpatients = useMemo(() => {
+    const query = normalizeWhitespace(inpatientSearch).toLowerCase();
+
+    return inpatients.filter((row) => {
+      const matchesStatus =
+        inpatientStatusFilter === "Semua" || row.status === inpatientStatusFilter;
+
+      if (!matchesStatus) return false;
+      if (!query) return true;
+
+      const haystacks = [row.nama, row.nomor_rm, row.kamar, row.diagnosa, row.status];
+      return haystacks.some((value) => String(value || "").toLowerCase().includes(query));
+    });
+  }, [inpatientSearch, inpatientStatusFilter, inpatients]);
 
   return (
     <div className="app-shell min-h-screen text-slate-900">
@@ -275,9 +313,12 @@ export default function App() {
               ) : null}
               {activeView === "pasien" ? (
                 <PatientsView
-                  patients={patients}
+                  patients={filteredPatients}
+                  totalPatients={patients.length}
                   search={patientSearch}
                   onSearch={setPatientSearch}
+                  genderFilter={patientGenderFilter}
+                  onGenderFilterChange={setPatientGenderFilter}
                   onAdd={() =>
                     setPatientModal({ open: true, mode: "create", record: null })
                   }
@@ -287,7 +328,12 @@ export default function App() {
               ) : null}
               {activeView === "rawat" ? (
                 <InpatientsView
-                  inpatients={inpatients}
+                  inpatients={filteredInpatients}
+                  totalInpatients={inpatients.length}
+                  search={inpatientSearch}
+                  onSearch={setInpatientSearch}
+                  statusFilter={inpatientStatusFilter}
+                  onStatusFilterChange={setInpatientStatusFilter}
                   onAdd={() => setInpatientModal({ open: true })}
                   onPatch={(type, row) => setPatchModal({ open: true, type, row })}
                 />
@@ -349,7 +395,7 @@ function Sidebar({ activeView, onNavigate, open, onClose }) {
               <Stethoscope className="h-5 w-5 text-notion-green" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">SIMRS</p>
+              <p className="text-sm font-semibold text-white">SMRS</p>
               <p className="text-xs text-slate-400">Rawat Inap</p>
             </div>
           </div>
@@ -393,7 +439,154 @@ function Sidebar({ activeView, onNavigate, open, onClose }) {
 }
 
 function DashboardView({ dashboard, patients, inpatients, onGoPatients, onGoInpatients }) {
-  const latest = dashboard?.terbaru || [];
+  const [selectedChart, setSelectedChart] = useState("gender");
+  const chartData = useMemo(() => {
+    const totalPatients = dashboard?.total_pasien || patients.length || 0;
+    const activePatients =
+      dashboard?.total_rawat_inap ||
+      inpatients.filter((row) => ["Dirawat", "Observasi"].includes(row.status)).length;
+    const dischargedPatients =
+      dashboard?.total_pasien_keluar ||
+      inpatients.filter((row) => row.status === "Keluar").length;
+    const waitingPatients = Math.max(totalPatients - activePatients - dischargedPatients, 0);
+
+    return [
+      {
+        label: "Belum Rawat Inap",
+        value: waitingPatients,
+        description: "Pasien terdaftar tanpa status rawat inap aktif.",
+        tone: "bg-slate-400"
+      },
+      {
+        label: "Rawat Inap Aktif",
+        value: activePatients,
+        description: "Pasien dengan status Dirawat atau Observasi.",
+        tone: "bg-sky-400"
+      },
+      {
+        label: "Pasien Keluar",
+        value: dischargedPatients,
+        description: "Pasien yang sudah dinyatakan selesai dirawat.",
+        tone: "bg-emerald-400"
+      }
+    ];
+  }, [dashboard, inpatients, patients.length]);
+
+  const totalChartValue = chartData.reduce((total, item) => total + item.value, 0);
+  const chartSegments = useMemo(() => {
+    if (!totalChartValue) {
+      return chartData.map((item) => ({
+        ...item,
+        percentage: 0,
+        displayPercentage: "0.0%"
+      }));
+    }
+
+    return chartData.map((item) => {
+      const percentage = (item.value / totalChartValue) * 100;
+      return {
+        ...item,
+        percentage,
+        displayPercentage: `${percentage.toFixed(1)}%`
+      };
+    });
+  }, [chartData, totalChartValue]);
+  const chartGradient = useMemo(() => {
+    if (!totalChartValue) {
+      return "conic-gradient(#334155 0deg 360deg)";
+    }
+
+    let currentStop = 0;
+    return `conic-gradient(${chartSegments
+      .map((item) => {
+        const start = currentStop;
+        currentStop += (item.percentage / 100) * 360;
+        const color =
+          item.label === "Belum Rawat Inap"
+            ? "#94A3B8"
+            : item.label === "Rawat Inap Aktif"
+              ? "#38BDF8"
+              : "#34D399";
+        return `${color} ${start}deg ${currentStop}deg`;
+      })
+      .join(", ")})`;
+  }, [chartSegments, totalChartValue]);
+  const secondaryCharts = useMemo(() => {
+    const genderStats = patients.reduce(
+      (accumulator, patient) => {
+        if (patient.jenis_kelamin === "Perempuan") {
+          accumulator.perempuan += 1;
+        } else if (patient.jenis_kelamin === "Laki-laki") {
+          accumulator.lakiLaki += 1;
+        }
+        return accumulator;
+      },
+      { lakiLaki: 0, perempuan: 0 }
+    );
+
+    const inpatientStatusStats = inpatients.reduce(
+      (accumulator, row) => {
+        if (row.status === "Keluar") {
+          accumulator.keluar += 1;
+        } else if (row.status === "Observasi") {
+          accumulator.observasi += 1;
+        } else {
+          accumulator.dirawat += 1;
+        }
+        return accumulator;
+      },
+      { dirawat: 0, observasi: 0, keluar: 0 }
+    );
+
+    const roomStats = Object.entries(
+      inpatients.reduce((accumulator, row) => {
+        const roomName = normalizeWhitespace(row.kamar || "Belum diisi");
+        accumulator[roomName] = (accumulator[roomName] || 0) + 1;
+        return accumulator;
+      }, {})
+    )
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5);
+
+    return {
+      gender: {
+        title: "Diagram Jenis Kelamin",
+        description: "Komposisi pasien berdasarkan jenis kelamin dari data yang sedang dimuat.",
+        items: [
+          { label: "Laki-laki", value: genderStats.lakiLaki, tone: "bg-blue-400", textTone: "text-blue-200" },
+          { label: "Perempuan", value: genderStats.perempuan, tone: "bg-rose-400", textTone: "text-rose-200" }
+        ]
+      },
+      inpatientStatus: {
+        title: "Diagram Status Rawat Inap",
+        description: "Distribusi status pasien dari daftar rawat inap yang sedang tampil.",
+        items: [
+          { label: "Dirawat", value: inpatientStatusStats.dirawat, tone: "bg-notion-green", textTone: "text-notion-green" },
+          { label: "Observasi", value: inpatientStatusStats.observasi, tone: "bg-sky-400", textTone: "text-sky-200" },
+          { label: "Keluar", value: inpatientStatusStats.keluar, tone: "bg-emerald-400", textTone: "text-emerald-200" }
+        ]
+      },
+      rooms: {
+        title: "Diagram Kamar Terpadat",
+        description: "Top 5 kamar dengan jumlah pasien terbanyak dari data rawat inap yang dimuat.",
+        items: roomStats.length
+          ? roomStats.map(([label, value], index) => ({
+              label,
+              value,
+              tone: ["bg-notion-green", "bg-sky-400", "bg-emerald-400", "bg-blue-500", "bg-slate-400"][index] || "bg-slate-400",
+              textTone: "text-white"
+            }))
+          : [{ label: "Belum ada data kamar", value: 0, tone: "bg-slate-400", textTone: "text-slate-300" }]
+      }
+    };
+  }, [inpatients, patients]);
+  const activeSecondaryChart = secondaryCharts[selectedChart] || secondaryCharts.gender;
+  const secondaryMax = Math.max(...activeSecondaryChart.items.map((item) => item.value), 1);
+  const dominantSegment = chartSegments.reduce(
+    (current, item) => (item.value > current.value ? item : current),
+    chartSegments[0] || { label: "-", value: 0, displayPercentage: "0.0%" }
+  );
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-3">
@@ -417,51 +610,121 @@ function DashboardView({ dashboard, patients, inpatients, onGoPatients, onGoInpa
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
+      <section className="grid items-start gap-6 xl:grid-cols-[1.4fr_0.9fr]">
         <div className="glass-panel rounded-lg p-5">
           <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-lg font-semibold text-white">Ringkasan Terbaru</h2>
-              <p className="text-sm text-slate-400">Update rawat inap terakhir</p>
+              <h2 className="text-lg font-semibold text-white">Grafik Status Pasien</h2>
+              <p className="text-sm text-slate-400">Proporsi pasien berdasarkan status perawatan.</p>
             </div>
             <button
               type="button"
               onClick={onGoInpatients}
               className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 transition hover:border-notion-green/45 hover:bg-notion-green/12"
             >
-              <ClipboardList className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4" />
               Lihat Rawat Inap
             </button>
           </div>
 
-          <div className="space-y-3">
-            {latest.length ? (
-              latest.map((row) => (
+          <div className="space-y-4">
+            <div className="grid gap-5 rounded-lg border border-white/10 bg-white/[0.035] p-4 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="flex flex-col items-center justify-center">
                 <div
-                  key={row.id}
-                  className="grid gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-4 transition hover:border-notion-green/30 hover:bg-white/[0.06] sm:grid-cols-[1fr_auto]"
+                  className="relative grid h-56 w-56 place-items-center rounded-full border border-white/10 shadow-[0_18px_48px_rgba(15,23,42,0.28)]"
+                  style={{ background: chartGradient }}
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate font-semibold text-white">{row.nama}</h3>
-                      <span className="text-xs text-slate-500">{row.nomor_rm}</span>
+                  <div className="grid h-32 w-32 place-items-center rounded-full border border-white/10 bg-ink-950 text-center shadow-inner">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">Total</p>
+                      <p className="mt-2 text-3xl font-semibold text-white">{totalChartValue}</p>
                     </div>
-                    <p className="mt-1 text-sm text-slate-300">{row.diagnosa}</p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Kamar {row.kamar} · Masuk {row.tanggal_masuk}
-                    </p>
                   </div>
-                  <StatusBadge status={row.status} />
                 </div>
-              ))
-            ) : (
-              <EmptyState title="Belum ada rawat inap" actionLabel="Tambah data" onAction={onGoInpatients} />
-            )}
+                <p className="mt-4 text-center text-sm text-slate-400">
+                  Status dominan: <span className="font-medium text-slate-200">{dominantSegment.label}</span>{" "}
+                  ({dominantSegment.displayPercentage})
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {chartSegments.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={classNames("h-3.5 w-3.5 rounded-full", item.tone)}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                          <p className="text-xs text-slate-500">{item.displayPercentage}</p>
+                        </div>
+                      </div>
+                      <p className="text-2xl font-semibold text-white">{item.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          {/* <StringPreview /> */}
+          <div className="glass-panel rounded-lg p-5">
+            <div className="mb-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-notion-green/14 text-notion-green">
+                  <ClipboardList className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Diagram Tambahan</h2>
+                  <p className="text-sm text-slate-400">{activeSecondaryChart.title}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Tampilkan</span>
+                <select
+                  value={selectedChart}
+                  onChange={(event) => setSelectedChart(event.target.value)}
+                  className="field max-w-[240px] bg-white/5 text-sm text-slate-100"
+                >
+                  <option value="gender">Jenis Kelamin</option>
+                  <option value="inpatientStatus">Status Rawat Inap</option>
+                  <option value="rooms">Kamar Terpadat</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {activeSecondaryChart.items.map((item) => {
+                const width = `${Math.max((item.value / secondaryMax) * 100, item.value ? 12 : 0)}%`;
+                return (
+                <div
+                  key={item.label}
+                  className="rounded-lg border border-white/10 bg-white/[0.035] px-4 py-3"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className={classNames("h-3.5 w-3.5 rounded-full", item.tone)} />
+                      <span className="text-sm text-slate-200">{item.label}</span>
+                    </div>
+                    <span className={classNames("text-sm font-semibold", item.textTone)}>{item.value}</span>
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-white/8">
+                    <div
+                      className={classNames("h-full rounded-full transition-all duration-500", item.tone)}
+                      style={{ width }}
+                    />
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="glass-panel rounded-lg p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-sky-400/10 text-sky-200">
@@ -507,18 +770,45 @@ function StatCard({ icon: Icon, label, value, tone }) {
   );
 }
 
-function PatientsView({ patients, search, onSearch, onAdd, onEdit, onDelete }) {
+function PatientsView({
+  patients,
+  totalPatients,
+  search,
+  onSearch,
+  genderFilter,
+  onGenderFilterChange,
+  onAdd,
+  onEdit,
+  onDelete
+}) {
+  const hasActiveFilter = Boolean(search) || genderFilter !== "Semua";
+  const emptyTitle = hasActiveFilter ? "Tidak ada pasien yang cocok dengan filter." : "Data pasien belum ditemukan";
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="relative w-full max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            value={search}
-            onChange={(event) => onSearch(event.target.value)}
-            className="field h-11 pl-10 pr-4"
-            placeholder="Cari nama atau nomor RM"
-          />
+      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+        <div className="flex w-full flex-col gap-3 lg:flex-row">
+          <div className="relative w-full max-w-xl flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(event) => onSearch(event.target.value)}
+              className="field h-11 pl-10 pr-4"
+              placeholder="Cari nama atau nomor RM"
+            />
+          </div>
+          <select
+            value={genderFilter}
+            onChange={(event) => onGenderFilterChange(event.target.value)}
+            className="field h-11 min-w-[190px] px-3"
+            aria-label="Filter jenis kelamin"
+          >
+            {PATIENT_GENDER_FILTER_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option === "Semua" ? "Semua Jenis Kelamin" : option}
+              </option>
+            ))}
+          </select>
         </div>
         <button
           type="button"
@@ -529,6 +819,11 @@ function PatientsView({ patients, search, onSearch, onAdd, onEdit, onDelete }) {
           Tambah Pasien
         </button>
       </div>
+
+      <p className="text-sm text-slate-400">
+        Menampilkan <span className="font-semibold text-white">{patients.length}</span> dari{" "}
+        <span className="font-semibold text-white">{totalPatients}</span> pasien
+      </p>
 
       <div className="glass-panel overflow-hidden rounded-lg">
         <div className="table-scroll overflow-x-auto">
@@ -588,7 +883,7 @@ function PatientsView({ patients, search, onSearch, onAdd, onEdit, onDelete }) {
               ) : (
                 <tr>
                   <td className="px-5 py-12" colSpan={7}>
-                    <EmptyState title="Data pasien belum ditemukan" actionLabel="Tambah pasien" onAction={onAdd} />
+                    <EmptyState title={emptyTitle} actionLabel="Tambah pasien" onAction={onAdd} />
                   </td>
                 </tr>
               )}
@@ -600,10 +895,47 @@ function PatientsView({ patients, search, onSearch, onAdd, onEdit, onDelete }) {
   );
 }
 
-function InpatientsView({ inpatients, onAdd, onPatch }) {
+function InpatientsView({
+  inpatients,
+  totalInpatients,
+  search,
+  onSearch,
+  statusFilter,
+  onStatusFilterChange,
+  onAdd,
+  onPatch
+}) {
+  const hasActiveFilter = Boolean(search) || statusFilter !== "Semua";
+  const emptyTitle = hasActiveFilter
+    ? "Tidak ada data rawat inap yang cocok dengan filter."
+    : "Data rawat inap belum ada";
+
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
+      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+        <div className="flex w-full flex-col gap-3 lg:flex-row">
+          <div className="relative w-full max-w-xl flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(event) => onSearch(event.target.value)}
+              className="field h-11 pl-10 pr-4"
+              placeholder="Cari pasien, nomor RM, kamar, atau diagnosa"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => onStatusFilterChange(event.target.value)}
+            className="field h-11 min-w-[180px] px-3"
+            aria-label="Filter status rawat inap"
+          >
+            {INPATIENT_STATUS_FILTER_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option === "Semua" ? "Semua Status" : option}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
           onClick={onAdd}
@@ -613,6 +945,11 @@ function InpatientsView({ inpatients, onAdd, onPatch }) {
           Tambah Rawat Inap
         </button>
       </div>
+
+      <p className="text-sm text-slate-400">
+        Menampilkan <span className="font-semibold text-white">{inpatients.length}</span> dari{" "}
+        <span className="font-semibold text-white">{totalInpatients}</span> data rawat inap
+      </p>
 
       <div className="glass-panel overflow-hidden rounded-lg">
         <div className="table-scroll overflow-x-auto">
@@ -673,7 +1010,7 @@ function InpatientsView({ inpatients, onAdd, onPatch }) {
               ) : (
                 <tr>
                   <td className="px-5 py-12" colSpan={7}>
-                    <EmptyState title="Data rawat inap belum ada" actionLabel="Tambah rawat inap" onAction={onAdd} />
+                    <EmptyState title={emptyTitle} actionLabel="Tambah rawat inap" onAction={onAdd} />
                   </td>
                 </tr>
               )}
@@ -728,7 +1065,7 @@ function PatientModal({ state, busy, onClose, onSubmit }) {
 
 function PatientForm({ record, mode, busy, onSubmit, onCancel }) {
   const [form, setForm] = useState(() => ({
-    nomor_rm: record?.nomor_rm || nextRecordNumber(),
+    nomor_rm: record?.nomor_rm || "",
     nama: record?.nama || "",
     jenis_kelamin: record?.jenis_kelamin || "Laki-laki",
     tanggal_lahir: record?.tanggal_lahir || "",
@@ -740,9 +1077,20 @@ function PatientForm({ record, mode, busy, onSubmit, onCancel }) {
 
   function validate() {
     const nextErrors = {};
-    if (!normalizeWhitespace(form.nama)) nextErrors.nama = "Nama pasien tidak boleh kosong.";
+    const normalizedName = normalizeWhitespace(form.nama);
+    if (!normalizedName) {
+      nextErrors.nama = "Nama pasien tidak boleh kosong.";
+    } else if (!isValidPatientName(normalizedName)) {
+      nextErrors.nama = "Nama pasien hanya boleh berisi huruf dan spasi.";
+    }
+    if (!GENDER_OPTIONS.includes(form.jenis_kelamin)) {
+      nextErrors.jenis_kelamin = "Jenis kelamin harus Laki-laki atau Perempuan.";
+    }
     if (!form.tanggal_lahir) nextErrors.tanggal_lahir = "Tanggal lahir wajib diisi.";
     if (!normalizeWhitespace(form.alamat)) nextErrors.alamat = "Alamat pasien tidak boleh kosong.";
+    if (!isValidPhoneNumber(form.no_telepon)) {
+      nextErrors.no_telepon = "No. telepon harus diawali 0 dan hanya berisi 10-15 digit.";
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -765,8 +1113,13 @@ function PatientForm({ record, mode, busy, onSubmit, onCancel }) {
             className="field h-11 px-3"
             value={form.nomor_rm}
             onChange={(event) => setForm({ ...form, nomor_rm: event.target.value })}
-            placeholder="RM-000001"
+            placeholder="Otomatis: RM-YYYYMMDD-0001"
           />
+          {mode === "create" ? (
+            <p className="mt-2 text-xs text-slate-400">
+              Kosongkan untuk membuat nomor rekam medis otomatis.
+            </p>
+          ) : null}
         </Field>
         <Field label="Jenis Kelamin" error={errors.jenis_kelamin}>
           <select
@@ -787,7 +1140,9 @@ function PatientForm({ record, mode, busy, onSubmit, onCancel }) {
         <input
           className="field h-11 px-3"
           value={form.nama}
-          onChange={(event) => setForm({ ...form, nama: event.target.value })}
+          onChange={(event) =>
+            setForm({ ...form, nama: sanitizePatientNameInput(event.target.value) })
+          }
           placeholder="Contoh:   budi   santoso"
           required
         />
@@ -824,8 +1179,12 @@ function PatientForm({ record, mode, busy, onSubmit, onCancel }) {
         <input
           className="field h-11 px-3"
           value={form.no_telepon}
-          onChange={(event) => setForm({ ...form, no_telepon: event.target.value })}
+          onChange={(event) =>
+            setForm({ ...form, no_telepon: sanitizePhoneInput(event.target.value) })
+          }
           placeholder="08xxxxxxxxxx"
+          inputMode="numeric"
+          maxLength={15}
         />
       </Field>
 

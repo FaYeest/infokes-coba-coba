@@ -12,7 +12,9 @@
     "server": "npm run dev --workspace server",
     "client": "npm run dev --workspace client",
     "build": "npm run build --workspace client",
-    "start": "npm run start --workspace server"
+    "start": "npm run start --workspace server",
+    "seed:covid": "npm run seed:covid --workspace server",
+    "seed:covid:reset": "npm run seed:covid:reset --workspace server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

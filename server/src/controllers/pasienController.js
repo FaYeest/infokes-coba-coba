@@ -1,6 +1,8 @@
 import { pool } from "../config/db.js";
 import {
   createMedicalRecordNumber,
+  getMedicalRecordDateStamp,
+  getMedicalRecordSequence,
   normalizePatientName,
   normalizeWhitespace
 } from "../helpers/string.js";
@@ -20,23 +22,47 @@ const patientSelect = `
   FROM pasien
 `;
 
+function getListLimit(value) {
+  const parsed = Number(value || 200);
+  if (!Number.isFinite(parsed) || parsed < 1) return 200;
+  return Math.min(parsed, 500);
+}
+
+async function getNextMedicalRecordNumber() {
+  const today = new Date();
+  const dateStamp = getMedicalRecordDateStamp(today);
+  const [rows] = await pool.query(
+    `SELECT nomor_rm
+    FROM pasien
+    WHERE nomor_rm LIKE ?
+    ORDER BY nomor_rm DESC
+    LIMIT 1`,
+    [`RM-${dateStamp}-%`]
+  );
+
+  const lastSequence = rows[0] ? getMedicalRecordSequence(rows[0].nomor_rm) : 0;
+  return createMedicalRecordNumber(today, lastSequence + 1);
+}
+
 export async function getPatients(req, res, next) {
   try {
     const search = normalizeWhitespace(req.query.search || "");
+    const limit = getListLimit(req.query.limit);
 
     if (search) {
       const like = `%${search}%`;
       const [rows] = await pool.query(
         `${patientSelect}
         WHERE nama LIKE ? OR nomor_rm LIKE ?
-        ORDER BY created_at DESC`,
-        [like, like]
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+        [like, like, limit]
       );
-      return res.json({ success: true, data: rows, meta: { search } });
+      return res.json({ success: true, data: rows, meta: { search, limit } });
     }
 
-    const [rows] = await pool.query(`${patientSelect} ORDER BY created_at DESC`);
-    res.json({ success: true, data: rows, meta: { search: "" } });
+    const [rows] = await pool.query(`${patientSelect} ORDER BY created_at DESC, id DESC LIMIT ?`, [limit]);
+    res.json({ success: true, data: rows, meta: { search: "", limit } });
   } catch (error) {
     next(error);
   }
@@ -50,7 +76,7 @@ export async function createPatient(req, res, next) {
     }
 
     const normalizedName = normalizePatientName(req.body.nama);
-    const nomorRm = normalizeWhitespace(req.body.nomor_rm || "") || createMedicalRecordNumber();
+    const nomorRm = normalizeWhitespace(req.body.nomor_rm || "") || (await getNextMedicalRecordNumber());
 
     const [result] = await pool.query(
       `INSERT INTO pasien
@@ -93,6 +119,14 @@ export async function updatePatient(req, res, next) {
     const normalizedName = normalizePatientName(req.body.nama);
     const nomorRm = normalizeWhitespace(req.body.nomor_rm || "");
 
+    if (!nomorRm) {
+      return res.status(422).json({
+        success: false,
+        message: "Validasi pasien gagal.",
+        errors: { nomor_rm: "Nomor rekam medis wajib ada saat update." }
+      });
+    }
+
     const [result] = await pool.query(
       `UPDATE pasien
       SET nomor_rm = ?,
@@ -103,7 +137,7 @@ export async function updatePatient(req, res, next) {
         no_telepon = ?
       WHERE id = ?`,
       [
-        nomorRm || createMedicalRecordNumber(),
+        nomorRm,
         normalizedName,
         req.body.jenis_kelamin,
         req.body.tanggal_lahir,
